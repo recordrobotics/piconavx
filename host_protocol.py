@@ -72,8 +72,8 @@ def parse_set_data_command(line:str):
 def format_id(id:str):
     return f"{HOST_DATA_TYPE_ID}{id}\n"
 
-def format_health_update(memoryUsed:int,memoryTotal:int):
-    return f"{HOST_DATA_TYPE_HEALTH}{memoryUsed}{HOST_DATA_FIELD_SEPARATOR}{memoryTotal}\n"
+def format_health_update(memoryUsed:int,memoryTotal:int,coreTemp:float):
+    return f"{HOST_DATA_TYPE_HEALTH}{memoryUsed}{HOST_DATA_FIELD_SEPARATOR}{memoryTotal}{HOST_DATA_FIELD_SEPARATOR}{coreTemp}\n"
 
 def format_ypr_update(yaw:float,pitch:float,roll:float):
     return f"{HOST_DATA_TYPE_YPR}{yaw}{HOST_DATA_FIELD_SEPARATOR}{pitch}{HOST_DATA_FIELD_SEPARATOR}{roll}\n"
@@ -178,7 +178,8 @@ def format_boardid_update(
 def write_health_update(writer: uasyncio.StreamWriter, health):
     writer.write(format_health_update(
         health['mem_used'],
-        health['mem_total']
+        health['mem_total'],
+        health['core_temp']
         ).encode("ascii"))
 
 def write_ypr_update(writer: uasyncio.StreamWriter, ahrspos_update):

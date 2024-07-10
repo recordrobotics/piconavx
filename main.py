@@ -8,6 +8,14 @@ import uasyncio
 import gc
 import time
 
+coreTempSensor = machine.ADC(machine.ADC.CORE_TEMP)
+
+def read_core_temp():
+    adc_value = coreTempSensor.read_u16()
+    volt = (3.3/65535)*adc_value
+    temperature = 27 - (volt - 0.706)/0.001721
+    return temperature
+
 # https://forum.micropython.org/viewtopic.php?t=3499
 # Returns (used, free, total)
 def mem_stats(force_gc:bool = False):
@@ -26,7 +34,8 @@ board_state={}
 board_id={}
 health={
     "mem_used":0,
-    "mem_total":0
+    "mem_total":0,
+    "core_temp":0.0
 }
 
 health_requested:bool = False
@@ -41,6 +50,7 @@ def get_health():
     (used, _, total) = mem_stats(True)
     health['mem_used'] = used
     health['mem_total'] = total
+    health['core_temp'] = read_core_temp()
 
 host_update_delay=1
                 
