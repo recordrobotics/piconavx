@@ -1,43 +1,73 @@
 import uasyncio
+import ustruct
+from feed import *
 
-HOST_INTRODUCTION = "PICONAVX-HOST\r\n"
+HOST_INTRODUCTION = const("PICONAVX-HOST\r\n")
 
-HOST_DATA_FIELD_SEPARATOR = '|'
+HOST_DATA_FIELD_SEPARATOR = const('|')
+HOST_DATA_FEED_TIMESTAMP_SEPARATOR = const(':')
+HOST_DATA_FEED_ENTRY_SEPARATOR = const(';')
 
-HOST_DATA_TYPE_ID = "ID:"
-HOST_DATA_TYPE_RAW = "RAW:"
-HOST_DATA_TYPE_AHRS = "AHRS:"
-HOST_DATA_TYPE_AHRSPOS = "AHRSPOS:"
-HOST_DATA_TYPE_YPR = "YPR:"
-HOST_DATA_TYPE_HEALTH = "HEALTH:"
-HOST_DATA_TYPE_BOARDSTATE = "BSTATE:"
-HOST_DATA_TYPE_BOARDID = "BID:"
+HOST_DATA_TYPE_ID = const("ID:")
+HOST_DATA_TYPE_RAW = const("RAW:")
+HOST_DATA_TYPE_AHRS = const("AHRS:")
+HOST_DATA_TYPE_AHRSPOS = const("AHRSPOS:")
+HOST_DATA_TYPE_YPR = const("YPR:")
+HOST_DATA_TYPE_HEALTH = const("HEALTH:")
+HOST_DATA_TYPE_BOARDSTATE = const("BSTATE:")
+HOST_DATA_TYPE_BOARDID = const("BID:")
+HOST_DATA_TYPE_FEED = const("FEED:")
 
-HOST_COMMAND_SET_DATA_TYPE = "SETDATA:"
-HOST_COMMAND_SET_DATA_TYPE_RAW = "RAW"
-HOST_COMMAND_SET_DATA_TYPE_AHRS = "AHRS"
-HOST_COMMAND_SET_DATA_TYPE_AHRSPOS = "AHRSPOS"
-HOST_COMMAND_SET_DATA_TYPE_YPR = "YPR"
+HOST_COMMAND_SET_DATA_TYPE = const("SETDATA:")
+HOST_COMMAND_SET_DATA_TYPE_RAW = const("RAW")
+HOST_COMMAND_SET_DATA_TYPE_AHRS = const("AHRS")
+HOST_COMMAND_SET_DATA_TYPE_AHRSPOS = const("AHRSPOS")
+HOST_COMMAND_SET_DATA_TYPE_YPR = const("YPR")
+HOST_COMMAND_SET_DATA_TYPE_FEED = const("FEED")
 
-HOST_COMMAND_REQUEST_HEALTH = "GETHEALTH:"
-HOST_COMMAND_REQUEST_BOARDSTATE = "GETBSTATE:"
-HOST_COMMAND_REQUEST_BOARDID = "GETBID:"
-HOST_COMMAND_ZERO_YAW = "ZEROYAW:"
-HOST_COMMAND_ZERO_DISPLACEMENT = "ZERODISP:"
+HOST_COMMAND_REQUEST_HEALTH = const("GETHEALTH:")
+HOST_COMMAND_REQUEST_BOARDSTATE = const("GETBSTATE:")
+HOST_COMMAND_REQUEST_BOARDID = const("GETBID:")
+HOST_COMMAND_ZERO_YAW = const("ZEROYAW:")
+HOST_COMMAND_ZERO_DISPLACEMENT = const("ZERODISP:")
 
-COMMAND_TYPE_UNKNOWN = 0
-COMMAND_TYPE_SET_DATA = 1
-COMMAND_TYPE_REQUEST_HEALTH = 2
-COMMAND_TYPE_REQUEST_BOARDSTATE = 3
-COMMAND_TYPE_REQUEST_BOARDID = 4
-COMMAND_TYPE_ZERO_YAW = 5
-COMMAND_TYPE_ZERO_DISPLACEMENT = 6
+HOST_COMMAND_SET_FEED_OVERFLOW = const("SETFEEDOVF:")
+HOST_COMMAND_SET_FEED_OVERFLOW_DELETE_OLDEST = const("DELETE")
+HOST_COMMAND_SET_FEED_OVERFLOW_REDUCE_OLDEST_FREQUENCY = const("LOWFREQ")
+HOST_COMMAND_SET_FEED_OVERFLOW_SKIP = const("SKIP")
 
-SET_DATA_TYPE_UNKNOWN = 0
-SET_DATA_TYPE_RAW = 1
-SET_DATA_TYPE_AHRS = 2
-SET_DATA_TYPE_AHRSPOS = 3
-SET_DATA_TYPE_YPR = 4
+COMMAND_TYPE_UNKNOWN = const(0)
+COMMAND_TYPE_SET_DATA = const(1)
+COMMAND_TYPE_REQUEST_HEALTH = const(2)
+COMMAND_TYPE_REQUEST_BOARDSTATE = const(3)
+COMMAND_TYPE_REQUEST_BOARDID = const(4)
+COMMAND_TYPE_ZERO_YAW = const(5)
+COMMAND_TYPE_ZERO_DISPLACEMENT = const(6)
+COMMAND_TYPE_SET_FEED_OVERFLOW = const(7)
+
+SET_DATA_TYPE_UNKNOWN = const(0)
+## These data types are used for live previews where being up-to-date is a priority
+# Latest data from sensor (Raw values)
+SET_DATA_TYPE_RAW = const(1)
+# Latest data from sensor (AHRS)
+SET_DATA_TYPE_AHRS = const(2)
+# Latest data from sensor (AHRS with displacement)
+SET_DATA_TYPE_AHRSPOS = const(3)
+# Latest data from sensor (Yaw, Pitch, Roll)
+SET_DATA_TYPE_YPR = const(4)
+## The feed data type is used for analyzing sensor data where precise values are needed
+# Every single timestamped update (based on the update rate) since last feed packet (every 3 to 5 seconds to reduce network usage)
+# Note: feed size is limited by available memory - when the limit is reached the default behavior is to overwrite the oldest data.
+# This can be changed with the SET_FEED_OVERFLOW command
+SET_DATA_TYPE_FEED = const(5)
+
+SET_FEED_OVERFLOW_UNKNOWN = const(0)
+# Overwrite oldest data with new data
+SET_FEED_OVERFLOW_DELETE_OLDEST = const(1)
+# Dynamically reduce the frequency of data points in old data to accommodate new data
+SET_FEED_OVERFLOW_REDUCE_OLDEST_FREQUENCY = const(2)
+# Ignore any new data until the feed is sent and cleared (prioritizes existing data which might be more important)
+SET_FEED_OVERFLOW_SKIP = const(3)
 
 def parse_command_type(line:str):
     if(line.startswith(HOST_COMMAND_SET_DATA_TYPE)):
@@ -52,6 +82,8 @@ def parse_command_type(line:str):
         return COMMAND_TYPE_ZERO_YAW
     elif(line.startswith(HOST_COMMAND_ZERO_DISPLACEMENT)):
         return COMMAND_TYPE_ZERO_DISPLACEMENT
+    elif(line.startswith(HOST_COMMAND_SET_FEED_OVERFLOW)):
+        return COMMAND_TYPE_SET_FEED_OVERFLOW
     else:
         return COMMAND_TYPE_UNKNOWN
     
@@ -65,8 +97,21 @@ def parse_set_data_command(line:str):
         return SET_DATA_TYPE_AHRSPOS
     elif line == HOST_COMMAND_SET_DATA_TYPE_YPR:
         return SET_DATA_TYPE_YPR
+    elif line == HOST_COMMAND_SET_DATA_TYPE_FEED:
+        return SET_DATA_TYPE_FEED
     else:
         return SET_DATA_TYPE_UNKNOWN
+    
+def parse_set_feed_overflow_command(line:str):
+    line = line[len(HOST_COMMAND_SET_FEED_OVERFLOW):].strip()
+    if line == HOST_COMMAND_SET_FEED_OVERFLOW_DELETE_OLDEST:
+        return SET_FEED_OVERFLOW_DELETE_OLDEST
+    elif line == HOST_COMMAND_SET_FEED_OVERFLOW_REDUCE_OLDEST_FREQUENCY:
+        return SET_FEED_OVERFLOW_REDUCE_OLDEST_FREQUENCY
+    elif line == HOST_COMMAND_SET_FEED_OVERFLOW_SKIP:
+        return SET_FEED_OVERFLOW_SKIP
+    else:
+        return SET_FEED_OVERFLOW_UNKNOWN
     
 
 def format_id(id:str):
@@ -174,6 +219,34 @@ def format_boardid_update(
     fw_revision:int
     ):
     return f"{HOST_DATA_TYPE_BOARDID}{type}{HOST_DATA_FIELD_SEPARATOR}{hw_rev}{HOST_DATA_FIELD_SEPARATOR}{fw_ver_major}{HOST_DATA_FIELD_SEPARATOR}{fw_ver_minor}{HOST_DATA_FIELD_SEPARATOR}{fw_revision}\n"
+
+def format_feed_entry(
+    yaw:float,
+    pitch:float,
+    roll:float,
+    compass_heading:float,
+    altitude:float,
+    fused_heading:float,
+    linear_accel_x:float,
+    linear_accel_y:float,
+    linear_accel_z:float,
+    mpu_temp:float,
+    quat_w:float,
+    quat_x:float,
+    quat_y:float,
+    quat_z:float,
+    barometric_pressure:float,
+    baro_temp:float,
+    vel_x:float,
+    vel_y:float,
+    vel_z:float,
+    disp_x:float,
+    disp_y:float,
+    disp_z:float,
+    buffer,
+    offset
+    ):
+    return ustruct.pack_into(">ffffffffffffffffffffff", buffer, offset, yaw, pitch, roll, compass_heading, altitude, fused_heading, linear_accel_x, linear_accel_y, linear_accel_z, mpu_temp, quat_w, quat_x, quat_y, quat_z, barometric_pressure, baro_temp, vel_x, vel_y, vel_z, disp_x, disp_y, disp_z)
 
 def write_health_update(writer: uasyncio.StreamWriter, health):
     writer.write(format_health_update(
@@ -285,3 +358,15 @@ def write_boardid_update(writer: uasyncio.StreamWriter, board_id):
         board_id['fw_ver_minor'],
         board_id['fw_revision']
         ).encode("ascii"))
+    
+async def write_feed_update(writer: uasyncio.StreamWriter, feed: Feed):
+    used_chunks = feed.buffer.chunk_count - feed.buffer.unused_chunks_ptr - 1
+    data_length = used_chunks * feed.chunk_size
+    writer.write((f"{HOST_DATA_TYPE_FEED}{data_length}{HOST_DATA_FIELD_SEPARATOR}{used_chunks}\n").encode("ascii"))
+    await writer.drain() # type: ignore
+    node = feed.buffer.start
+    while node is not None:
+        #writer.write(node.buffer_view)
+        writer.out_buf = node.buffer_view # type: ignore
+        await writer.drain() # type: ignore
+        node = node.next

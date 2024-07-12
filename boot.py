@@ -11,13 +11,13 @@ if hasattr(network, "WLAN"):
 
     if wifi is not None:
         if not sta_if.isconnected():
-            print('connecting to network...')
+            print('[Info] connecting to network...')
             sta_if.active(True)
             sta_if.connect(wifi['ssid'], wifi['key'])
             while not sta_if.isconnected():
                 pass
-        print('network config:', sta_if.ifconfig())
+        print('[Info] network config:', sta_if.ifconfig())
     else:
-        print('Wifi not in env')
+        print('[Error] Wifi not in env')
 else:
-    print('Board is not wifi capable')
+    print('[Error] Board is not wifi capable')

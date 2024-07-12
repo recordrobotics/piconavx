@@ -141,12 +141,12 @@ class RegisterIO:
             try:
                 self.port.writeto_mem(NAVX_ADDR, first_address + buffer_offset, bytes([read_len1]))
             except Exception as e:
-                print(e)
+                sys.print_exception(e) # type: ignore
                 good = False
             try:
                 self.port.readfrom_into(NAVX_ADDR, read_buffer)
             except Exception as e:
-                print(e)
+                sys.print_exception(e) # type: ignore
                 good = False
             if good:
                 for i in range(read_len1):

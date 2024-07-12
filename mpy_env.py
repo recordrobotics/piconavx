@@ -63,7 +63,7 @@ class _Env:
             file_path = cls._select_exist_file(cwd + "/env.json")
             if file_path is None:
                 if cls.verbose:
-                    print("'env.json' does not exist at root.")
+                    print("[Error] 'env.json' does not exist at root.")
                 return
             f = io.open(file_path, "r+", -1, "utf-8")
             env_dict = json.load(f)
@@ -71,7 +71,7 @@ class _Env:
             f.close()
             cls.__loaded = True
             if cls.verbose:
-                print("'%s' is loaded." % file_path)
+                print("[Error] '%s' is loaded." % file_path)
 
     @classmethod
     def get(cls, key: str):
